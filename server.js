@@ -10,15 +10,19 @@ const io = require("socket.io");
 
 const port = 5000;
 
+//database connection
+const Chat = require("./models/chat");
+const connect = require("./dbconnect");
 
-app.use(session({
-    secret: 'i need more beers',
-    resave: false,
-    saveUninitialized: true,
-    store: new MongoStore({
-        url: 'mongodb://localhost:27017/chats'
-    })
-}));
+
+// app.use(session({
+//   secret: 'i need more beers',
+//   resave: false,
+//   saveUninitialized: true,
+//   store: new MongoStore({
+//     url: 'mongodb://localhost:27017/chat/users'
+//   })
+// }));
 
 app.use(bodyParser.json());
 
@@ -29,15 +33,13 @@ app.use("/login", loginRouter);
 //integrating socketio
 socket = io(http);
 
-//database connection
-const Chat = require("./models/chat");
-const connect = require("./dbconnect");
+
 
 //setup event listener
 socket.on("connection", socket => {
   console.log("user connected");
 
-  socket.on("disconnect", function() {
+  socket.on("disconnect", function () {
     console.log("user disconnected");
   });
 
@@ -52,16 +54,38 @@ socket.on("connection", socket => {
     socket.broadcast.emit("notifyStopTyping");
   });
 
-  socket.on("chat message", function(msg) {
+  socket.on("login", () => {
+    connect.then(db => {
+      const data = Chats.find({ message: "Anonymous" });
+      Chats.find({}).then(chat => {
+        socket.emit("set messages", chat);
+      });
+    });
+  });
 
+  socket.on("send message", function (msg) {
     //broadcast message to everyone in port:5000 except yourself.
     socket.broadcast.emit("received", { message: msg });
 
     //save chat to the database
     connect.then(db => {
-      const chatMessage = new Chat({ message: msg, sender: "Anonymous" });
+      const chatMessage = new Chat({
+        text: msg,
+        user: {
+          _id: '123',
+          name: 'Valera'
+        }
+      });
 
-      chatMessage.save();
+      return chatMessage.save();
+
+    }).then(() => {
+      connect.then(db => {
+        const data = Chats.find({ message: "Anonymous" });
+        Chats.find({}).then(chat => {
+          socket.emit("set messages", chat);
+        });
+      });
     });
   });
 });
