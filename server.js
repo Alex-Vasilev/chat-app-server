@@ -1,18 +1,20 @@
-const express = require("express");
+const express = require('express');
 const app = express();
-const bodyParser = require("body-parser");
-const chatRouter = require("./routes/chat");
-const loginRouter = require("./routes/login");
+const bodyParser = require('body-parser');
+const chatRouter = require('./routes/chat');
+const loginRouter = require('./routes/login');
 const session = require('express-session')
 const MongoStore = require('connect-mongo')(session);
-const http = require("http").Server(app);
-const io = require("socket.io");
+const http = require('http').Server(app);
+const io = require('socket.io');
 
 const port = 5000;
 
 //database connection
-const Chat = require("./models/chat");
-const connect = require("./dbconnect");
+const Chat = require('./models/chat');
+const Message = require('./models/message');
+const User = require('./models/user');
+const connect = require('./dbconnect');
 
 
 // app.use(session({
@@ -27,49 +29,45 @@ const connect = require("./dbconnect");
 app.use(bodyParser.json());
 
 //routes
-app.use("/chats", chatRouter);
-app.use("/login", loginRouter);
+app.use('/chats', chatRouter);
+app.use('/login', loginRouter);
 
 //integrating socketio
 socket = io(http);
 
 
-
 //setup event listener
-socket.on("connection", socket => {
-  console.log("user connected");
+socket.on('connection', socket => {
+  console.log('user connected');
 
-  socket.on("disconnect", function () {
-    console.log("user disconnected");
+  socket.on('disconnect', function () {
+    console.log('user disconnected');
   });
 
-  socket.on("typing", data => {
-    socket.broadcast.emit("notifyTyping", {
+  socket.on('typing', data => {
+    socket.broadcast.emit('notifyTyping', {
       user: data.user,
       message: data.message
     });
   });
 
-  socket.on("stopTyping", () => {
-    socket.broadcast.emit("notifyStopTyping");
+  socket.on('stopTyping', () => {
+    socket.broadcast.emit('notifyStopTyping');
   });
 
-  socket.on("login", () => {
+  socket.on('login', () => {
     connect.then(db => {
-      const data = Chats.find({ message: "Anonymous" });
-      Chats.find({}).then(chat => {
-        socket.emit("set messages", chat);
-      });
+
     });
   });
 
-  socket.on("send message", function (msg) {
+  socket.on('send message', function (msg) {
     //broadcast message to everyone in port:5000 except yourself.
-    socket.broadcast.emit("received", { message: msg });
+    socket.broadcast.emit('received', { message: msg });
 
-    //save chat to the database
+    //save message to the database
     connect.then(db => {
-      const chatMessage = new Chat({
+      const chatMessage = new Message({
         text: msg,
         user: {
           _id: '123',
@@ -81,9 +79,8 @@ socket.on("connection", socket => {
 
     }).then(() => {
       connect.then(db => {
-        const data = Chats.find({ message: "Anonymous" });
-        Chats.find({}).then(chat => {
-          socket.emit("set messages", chat);
+        Message.find({}).then(message => {
+          socket.emit('set messages', message);
         });
       });
     });
@@ -92,5 +89,5 @@ socket.on("connection", socket => {
 
 
 http.listen(port, () => {
-  console.log("Running on Port: " + port);
+  console.log('Running on Port: ' + port);
 });
