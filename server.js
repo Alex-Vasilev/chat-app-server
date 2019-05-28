@@ -1,10 +1,10 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const chatRouter = require('./routes/chat');
+const searchRouter = require('./routes/search');
+const conversationsRouter = require('./routes/conversations');
+
 const loginRouter = require('./routes/login');
-const session = require('express-session')
-const MongoStore = require('connect-mongo')(session);
 const http = require('http').Server(app);
 const io = require('socket.io');
 
@@ -17,27 +17,34 @@ const User = require('./models/user');
 const connect = require('./dbconnect');
 
 
-// app.use(session({
-//   secret: 'i need more beers',
-//   resave: false,
-//   saveUninitialized: true,
-//   store: new MongoStore({
-//     url: 'mongodb://localhost:27017/chat/users'
-//   })
-// }));
-
 app.use(bodyParser.json());
 
 //routes
-app.use('/chats', chatRouter);
-app.use('/login', loginRouter);
+app.use('/conversations', conversationsRouter);
+app.use('/auth', loginRouter);
+app.use('/search', searchRouter);
+
 
 //integrating socketio
 socket = io(http);
 
 
 //setup event listener
-socket.on('connection', socket => {
+socket.use((socket, next) => {
+  if (socket.handshake.query && socket.handshake.query.token) {
+    jwt.verify(
+      socket.handshake.query.token,
+      'supersecret',
+      (err, decoded) => {
+        if (err) return next(new Error('Authentication error'));
+        socket.decoded = decoded;
+        next();
+      });
+  } else {
+    next(new Error('Authentication error'));
+  }
+
+}).on('connection', socket => {
   console.log('user connected');
 
   socket.on('disconnect', function () {

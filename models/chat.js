@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const chatSchema = new Schema(
     {
-        user: String,
-        reciever: String,
+        users: Array,
     },
     {
         timestamps: true
