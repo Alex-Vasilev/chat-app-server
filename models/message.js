@@ -6,7 +6,8 @@ const messageSchema = new Schema(
         user: {
             _id: String,
             name: String
-        }
+        },
+        chatId: String
     },
     {
         timestamps: true

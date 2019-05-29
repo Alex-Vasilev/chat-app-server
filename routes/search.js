@@ -7,12 +7,16 @@ const checkToken = require('../middlewares/check-token')
 router.use(checkToken)
 
 router.post('/', function (req, res, next) {
-    Users.find({ name: req.body.name })
-        .then(user => {
-            return res.json({
-                id: user._id,
-                name: user.name
+    Users
+        .find({ name: req.body.name })
+        .then(users => {
+            const usersArray = users.map(user => {
+                return {
+                    _id: user._id,
+                    name: user.name
+                }
             })
+            return res.json(usersArray)
         })
 });
 
