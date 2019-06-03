@@ -4,18 +4,18 @@ const bodyParser = require('body-parser');
 const searchRouter = require('./routes/search');
 const chatsRouter = require('./routes/chats');
 const jwt = require('jsonwebtoken')
-
+const config = require('./config');
 const loginRouter = require('./routes/login');
 const http = require('http').Server(app);
 const io = require('socket.io');
 
-const port = 5000;
 
 //database connection
 const Chat = require('./models/chat');
 const Message = require('./models/message');
 const User = require('./models/user');
 const connect = require('./dbconnect');
+
 
 
 app.use(bodyParser.json());
@@ -36,7 +36,7 @@ socket
     if (socket.handshake.query && socket.handshake.query.token) {
       jwt.verify(
         socket.handshake.query.token,
-        'supersecret',
+        config.SECRET_KEY,
         (err, decoded) => {
           if (err) {
             return next(new Error('Authentication error'))
@@ -85,6 +85,6 @@ socket
   });
 
 
-http.listen(port, () => {
-  console.log('Running on Port: ' + port);
+http.listen(config.PORT, () => {
+  console.log('Running on Port: ' + config.PORT);
 });
