@@ -1,28 +1,42 @@
 const express = require("express");
 const Chats = require("../models/chat");
+
 const router = express.Router();
-const checkToken = require('../middlewares/check-token')
+const checkToken = require('../middlewares/check-token');
+const User = require('../models/user');
 
+router.use(checkToken);
 
-router.use(checkToken)
-
-router.post('/', function (req, res, next) {
+// TODO: deprecated
+router.get('/', (req, res) => {
     Chats
-        .find({})
-        .then(chats => {
-            return res.json(chats)
+        .find({
+            _id: req.decoded._id
         })
+        .populate('messages')
+        .then(chats => {
+            return res.json(chats);
+        });
 });
 
-router.post('/new', function (req, res, next) {
+router.post('/new', (req, res) => {
     const chat = new Chats({
-        users: [req.body.userId, req.body.recieverId]
+        messages: [],
     });
 
     chat
         .save()
         .then(chat => {
-            return res.json(chat)
+            User.updateMany(
+                { _id: req.decoded._id },
+                { $push: { chats: chat._id } }
+            );
+            User.updateMany(
+                { _id: req.body.recieverId },
+                { $push: { chats: chat._id } }
+            );
+
+            return res.json(chat);
         });
 });
 

@@ -1,45 +1,41 @@
 const express = require('express');
+
 const app = express();
 const bodyParser = require('body-parser');
-const searchRouter = require('./routes/search');
-const chatsRouter = require('./routes/chats');
-const jwt = require('jsonwebtoken')
-const config = require('./config');
-const loginRouter = require('./routes/login');
+const jwt = require('jsonwebtoken');
 const http = require('http').Server(app);
 const io = require('socket.io');
+const tokenRouter = require('./routes/token');
+const searchRouter = require('./routes/search');
+const chatsRouter = require('./routes/chats');
+const CONFIG = require('./config');
+const loginRouter = require('./routes/login');
 
 
-//database connection
-const Chat = require('./models/chat');
+
 const Message = require('./models/message');
-const User = require('./models/user');
-const connect = require('./dbconnect');
-
-
+const Chat = require('./models/chat');
 
 app.use(bodyParser.json());
 
-//routes
+
 app.use('/chat', chatsRouter);
 app.use('/auth', loginRouter);
 app.use('/search', searchRouter);
+app.use('/token', tokenRouter);
 
 
-//integrating socketio
-socket = io(http);
+const socket = io(http);
 
-
-//setup event listener
 socket
   .use((socket, next) => {
     if (socket.handshake.query && socket.handshake.query.token) {
       jwt.verify(
         socket.handshake.query.token,
-        config.SECRET_KEY,
+        CONFIG.SECRET_KEY,
         (err, decoded) => {
           if (err) {
-            return next(new Error('Authentication error'))
+            return next(new Error('Authentication error'));
           }
           socket.decoded = decoded;
           next();
@@ -71,20 +67,31 @@ socket
         .find({ chatId })
         .then(messages => {
           socket.emit('set_messages', messages);
-        })
+        });
     });
 
     socket.on('send_message', message => {
-      //broadcast message to everyone in port:5000 except yourself.
       // socket.broadcast.emit('received', { message });
 
-      const chatMessage = new Message(message);
+      const chatMessage = new Message({
+        text: message.text,
+        user: socket.decoded._id,
+        chatId: message.chatId
+      });
 
-      return chatMessage.save();
+      chatMessage
+        .save()
+        .then(message => {
+          Chat
+            .update(
+              { _id: message.chatId },
+              { $push: { messages: message._id } }
+            );
+        });
+
     });
   });
 
-
-http.listen(config.PORT, () => {
-  console.log('Running on Port: ' + config.PORT);
+http.listen(CONFIG.PORT, () => {
+  console.log('Running on Port: ' + CONFIG.PORT);
 });

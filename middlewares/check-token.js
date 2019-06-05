@@ -1,15 +1,16 @@
 const jwt = require('jsonwebtoken');
-// const config = require('./config.js');
+const CONFIG = require('../config');
 
-function checkToken(req, res, next) {
-    let token = req.headers['authorization']; 
+const checkToken = (req, res, next) => {
+    let token = req.headers['authorization'];
+
     if (token) {
         if (token.startsWith('Bearer ')) {
             // Remove Bearer from string
             token = token.slice(7, token.length);
         }
 
-        jwt.verify(token, 'supersecret', (err, decoded) => {
+        jwt.verify(token, CONFIG.SECRET_KEY, (err, decoded) => {
             if (err) {
                 return res.json({
                     success: false,
