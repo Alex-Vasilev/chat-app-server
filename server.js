@@ -1,93 +1,96 @@
 const express = require('express');
+
 const app = express();
 const bodyParser = require('body-parser');
-const chatRouter = require('./routes/chat');
-const loginRouter = require('./routes/login');
-const session = require('express-session')
-const MongoStore = require('connect-mongo')(session);
+const jwt = require('jsonwebtoken');
 const http = require('http').Server(app);
 const io = require('socket.io');
+const tokenRouter = require('./routes/token');
+const searchRouter = require('./routes/search');
+const chatsRouter = require('./routes/chats');
+const CONFIG = require('./config');
+const loginRouter = require('./routes/login');
 
-const port = 5000;
 
-//database connection
-const Chat = require('./models/chat');
+
 const Message = require('./models/message');
-const User = require('./models/user');
-const connect = require('./dbconnect');
-
-
-// app.use(session({
-//   secret: 'i need more beers',
-//   resave: false,
-//   saveUninitialized: true,
-//   store: new MongoStore({
-//     url: 'mongodb://localhost:27017/chat/users'
-//   })
-// }));
+const Chat = require('./models/chat');
 
 app.use(bodyParser.json());
 
-//routes
-app.use('/chats', chatRouter);
-app.use('/login', loginRouter);
 
-//integrating socketio
-socket = io(http);
+app.use('/chat', chatsRouter);
+app.use('/auth', loginRouter);
+app.use('/search', searchRouter);
+app.use('/token', tokenRouter);
 
 
-//setup event listener
-socket.on('connection', socket => {
-  console.log('user connected');
+const socket = io(http);
 
-  socket.on('disconnect', function () {
-    console.log('user disconnected');
-  });
-
-  socket.on('typing', data => {
-    socket.broadcast.emit('notifyTyping', {
-      user: data.user,
-      message: data.message
-    });
-  });
-
-  socket.on('stopTyping', () => {
-    socket.broadcast.emit('notifyStopTyping');
-  });
-
-  socket.on('login', () => {
-    connect.then(db => {
-
-    });
-  });
-
-  socket.on('send message', function (msg) {
-    //broadcast message to everyone in port:5000 except yourself.
-    socket.broadcast.emit('received', { message: msg });
-
-    //save message to the database
-    connect.then(db => {
-      const chatMessage = new Message({
-        text: msg,
-        user: {
-          _id: '123',
-          name: 'Valera'
-        }
-      });
-
-      return chatMessage.save();
-
-    }).then(() => {
-      connect.then(db => {
-        Message.find({}).then(message => {
-          socket.emit('set messages', message);
+socket
+  .use((socket, next) => {
+    if (socket.handshake.query && socket.handshake.query.token) {
+      jwt.verify(
+        socket.handshake.query.token,
+        CONFIG.SECRET_KEY,
+        (err, decoded) => {
+          if (err) {
+            return next(new Error('Authentication error'));
+          }
+          socket.decoded = decoded;
+          next();
         });
+    } else {
+      next(new Error('Authentication error'));
+    }
+  })
+  .on('connection', socket => {
+    console.log('user connected');
+
+    socket.on('disconnect', () => {
+      console.log('user disconnected');
+    });
+
+    socket.on('typing', data => {
+      socket.broadcast.emit('notifyTyping', {
+        user: data.user,
+        message: data.message
       });
     });
+
+    socket.on('stop_typing', () => {
+      socket.broadcast.emit('notifyStopTyping');
+    });
+
+    socket.on('send_message', message => {
+      // socket.broadcast.emit('received', { message });
+
+      const chatMessage = new Message({
+        text: message.text,
+        user: socket.decoded._id,
+        chatId: message.chatId
+      });
+
+      chatMessage
+        .save()
+        .then(message => {
+          Chat
+            .updateMany(
+              { _id: message.chatId },
+              { $push: { messages: message._id } }
+            ).then(() => {
+              Message
+                .find({ _id: message._id })
+                .populate('user')
+                .then((msg) => {
+                  socket.emit('new_message', msg);
+                });
+            }
+            );
+        });
+    });
   });
-});
 
-
-http.listen(port, () => {
-  console.log('Running on Port: ' + port);
+http.listen(CONFIG.PORT, () => {
+  console.log('Running on Port: ' + CONFIG.PORT);
 });
