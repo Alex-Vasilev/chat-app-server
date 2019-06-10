@@ -7,17 +7,6 @@ const User = require('../models/user');
 
 router.use(checkToken);
 
-// TODO: deprecated
-router.get('/', (req, res) => {
-    Chats
-        .find({
-            _id: req.decoded._id
-        })
-        .populate('messages')
-        .then(chats => {
-            return res.json(chats);
-        });
-});
 
 router.post('/new', (req, res) => {
     const chat = new Chats({
@@ -30,11 +19,12 @@ router.post('/new', (req, res) => {
             User.updateMany(
                 { _id: req.decoded._id },
                 { $push: { chats: chat._id } }
-            );
+            ).then((e) => console.log(e));
+            
             User.updateMany(
                 { _id: req.body.recieverId },
                 { $push: { chats: chat._id } }
-            );
+            ).then((e) => console.log(e));
 
             return res.json(chat);
         });

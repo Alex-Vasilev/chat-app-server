@@ -8,7 +8,7 @@ const generateToken = (user) => {
     const token = jwt.sign(
         { _id: user._id, name: user.name },
         CONFIG.SECRET_KEY,
-        { expiresIn: 300 }
+        { expiresIn: 30 }
     );
     CONFIG.REFRESH_TOKENS[refreshToken] = user.name;
 

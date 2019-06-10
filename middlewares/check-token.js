@@ -11,8 +11,11 @@ const checkToken = (req, res, next) => {
         }
 
         jwt.verify(token, CONFIG.SECRET_KEY, (err, decoded) => {
+
             if (err) {
+
                 return res.json({
+                    err,
                     success: false,
                     message: 'Token is not valid'
                 });

@@ -62,14 +62,6 @@ socket
       socket.broadcast.emit('notifyStopTyping');
     });
 
-    socket.on('get_messages', chatId => {
-      Message
-        .find({ chatId })
-        .then(messages => {
-          socket.emit('set_messages', messages);
-        });
-    });
-
     socket.on('send_message', message => {
       // socket.broadcast.emit('received', { message });
 
@@ -83,12 +75,19 @@ socket
         .save()
         .then(message => {
           Chat
-            .update(
+            .updateMany(
               { _id: message.chatId },
               { $push: { messages: message._id } }
+            ).then(() => {
+              Message
+                .find({ _id: message._id })
+                .populate('user')
+                .then((msg) => {
+                  socket.emit('new_message', msg);
+                });
+            }
             );
         });
-
     });
   });
 
