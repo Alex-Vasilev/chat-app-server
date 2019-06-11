@@ -16,7 +16,7 @@ router.route('/login').post((req, res, next) => {
           path: 'chats',
           populate: {
             path: 'messages',
-            populate: 'user'
+            populate: { path: 'user' }
           }
         })
         .then(user => {
