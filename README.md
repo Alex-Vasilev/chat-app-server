@@ -8,4 +8,4 @@ mongod --config /usr/local/etc/mongod.conf
  
 mongo
 
-node .
+node server.js
