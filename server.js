@@ -1,4 +1,6 @@
+require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 
 const app = express();
 const bodyParser = require('body-parser');
@@ -10,7 +12,7 @@ const searchRouter = require('./routes/search');
 const chatsRouter = require('./routes/chats');
 const CONFIG = require('./config');
 const loginRouter = require('./routes/login');
-
+mongoose.Promise = require('bluebird');
 
 
 const Message = require('./models/message');
@@ -91,6 +93,16 @@ socket
     });
   });
 
-http.listen(CONFIG.PORT, () => {
-  console.log('Running on Port: ' + CONFIG.PORT);
+
+mongoose.connect(CONFIG.URL, { useNewUrlParser: true });
+const db = mongoose.connection;
+
+db.once('open', function (err) {
+  if (err) {
+    console.log("Error Opening the DB Connection: ", err);
+    return;
+  }
+  http.listen(CONFIG.PORT, () => {
+    console.log('Running on Port: ' + CONFIG.PORT);
+  });
 });

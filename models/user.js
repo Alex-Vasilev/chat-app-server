@@ -20,7 +20,9 @@ const userSchema = new Schema(
         chats: [{
             type: Schema.Types.ObjectId,
             ref: CONFIG.DB_MODELS.CHAT
-        }]
+        }],
+        authyId: Number,
+        
     },
     {
         toJSON: {
