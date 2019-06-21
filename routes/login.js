@@ -10,7 +10,7 @@ const User = require('../models/user');
 
 
 router.route('/login').post((req, res, next) => {
-  const { name } = req.body;
+  const { name, password, isTwoFA } = req.body;
 
   User
     .findOne({ name })
@@ -23,7 +23,7 @@ router.route('/login').post((req, res, next) => {
     })
     .then((user) => {
 
-      user.comparePassword(req.body.password,
+      user.comparePassword(password,
         (err, isMatch) => {
           if (err) {
             throw err;
@@ -31,22 +31,31 @@ router.route('/login').post((req, res, next) => {
 
           if (isMatch) {
 
-            res.json({
-              ...JSON.parse(JSON.stringify(user)),
-              success: true
-            });
-
+            if (isTwoFA) {
+              res.json({
+                ...JSON.parse(JSON.stringify(user)),
+                success: true,
+              });
+            } else {
+              const { token, refreshToken } = generateToken(user);
+              res.json({
+                ...JSON.parse(JSON.stringify(user)),
+                _token: token,
+                refreshToken,
+                success: true,
+                message: 'Login successful!',
+              });
+            }
           } else {
             return next(new Error('err'));
           }
         });
     })
     .catch(e => console.log(e));
-
 });
 
 router.route('/registration').post((req, res) => {
-  const { name, password, email } = req.body;
+  const { name, password, email, countryCode, phone, isTwoFA } = req.body;
 
   User.findOne({ name }).exec((err, user) => {
     if (err) {
@@ -60,9 +69,9 @@ router.route('/registration').post((req, res) => {
     }
 
     authy.registerUser({
-      countryCode: req.body.countryCode,
+      countryCode,
       email,
-      phone: req.body.phoneNumber
+      phone
     }, (err, regRes) => {
       if (err) {
         res.json(err);
@@ -76,14 +85,26 @@ router.route('/registration').post((req, res) => {
         authyId: regRes.user.id
       });
 
-      newUser.save((err, usr) => {
+      newUser.save((err, savedUser) => {
         if (err) {
           res.json(err);
         } else {
-          res.json({
-            ...JSON.parse(JSON.stringify(usr)),
-            success: true,
-          });
+          if (isTwoFA) {
+            res.json({
+              ...JSON.parse(JSON.stringify(savedUser)),
+              success: true,
+            });
+          } else {
+            const { token, refreshToken } = generateToken(savedUser);
+
+            res.json({
+              ...JSON.parse(JSON.stringify(savedUser)),
+              _token: token,
+              refreshToken,
+              success: true,
+              message: 'Regisration successful!',
+            });
+          }
         }
       });
     });

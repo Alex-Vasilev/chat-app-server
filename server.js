@@ -64,6 +64,10 @@ socket
       socket.broadcast.emit('notifyStopTyping');
     });
 
+    socket.on('PUBLIC_KEY', (key) => {
+      socket.broadcast.emit('PUBLIC_KEY', key);
+    });
+
     socket.on('send_message', message => {
       // socket.broadcast.emit('received', { message });
 
