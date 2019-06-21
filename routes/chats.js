@@ -9,8 +9,11 @@ router.use(checkToken);
 
 
 router.post('/new', (req, res) => {
+
     const chat = new Chats({
         messages: [],
+        users: [req.decoded._id, req.body.recieverId],
+        title: ''
     });
 
     chat
