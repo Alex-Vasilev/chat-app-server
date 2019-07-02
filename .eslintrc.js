@@ -32,7 +32,7 @@ module.exports = {
         ],
         "semi": ["error", "always"],
         "global-require": ["off"],
-        "max-len": ["error", { "code": 80 }],
+        "max-len": ["error", { "code": 100 }],
         "no-case-declarations": ["off"],
         "no-unused-expressions": ["off"],
         "no-mixed-operators": ["off"],

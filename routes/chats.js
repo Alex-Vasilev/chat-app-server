@@ -10,22 +10,26 @@ router.use(checkToken);
 
 router.post('/new', (req, res) => {
 
+    const { recieverId } = req.body;
+    const { _id } = req.decoded;
+
     const chat = new Chats({
         messages: [],
-        users: [req.decoded._id, req.body.recieverId],
-        title: ''
+        users: [_id, recieverId],
+        title: `Chat with ${recieverId}`,
+        userKeys: {}
     });
 
     chat
         .save()
         .then(chat => {
             User.updateMany(
-                { _id: req.decoded._id },
+                { _id },
                 { $push: { chats: chat._id } }
             ).then((e) => console.log(e));
-            
+
             User.updateMany(
-                { _id: req.body.recieverId },
+                { _id: recieverId },
                 { $push: { chats: chat._id } }
             ).then((e) => console.log(e));
 

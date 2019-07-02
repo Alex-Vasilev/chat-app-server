@@ -14,15 +14,8 @@ router.route('/login').post((req, res, next) => {
 
   User
     .findOne({ name })
-    .populate({
-      path: 'chats',
-      populate: {
-        path: 'messages',
-        populate: { path: 'user' }
-      }
-    })
-    .then((user) => {
-
+    .populate('chats')
+    .exec((err, user) => {
       user.comparePassword(password,
         (err, isMatch) => {
           if (err) {
@@ -30,16 +23,15 @@ router.route('/login').post((req, res, next) => {
           }
 
           if (isMatch) {
-
             if (isTwoFA) {
               res.json({
-                ...JSON.parse(JSON.stringify(user)),
+                ...user._doc,
                 success: true,
               });
             } else {
               const { token, refreshToken } = generateToken(user);
               res.json({
-                ...JSON.parse(JSON.stringify(user)),
+                ...user._doc,
                 _token: token,
                 refreshToken,
                 success: true,
@@ -50,65 +42,66 @@ router.route('/login').post((req, res, next) => {
             return next(new Error('err'));
           }
         });
-    })
-    .catch(e => console.log(e));
+    });
 });
 
 router.route('/registration').post((req, res) => {
   const { name, password, email, countryCode, phone, isTwoFA } = req.body;
 
-  User.findOne({ name }).exec((err, user) => {
-    if (err) {
-      res.json(err);
-      return;
-    }
-
-    if (user) {
-      res.json({ err: "Username Already Registered" });
-      return;
-    }
-
-    authy.registerUser({
-      countryCode,
-      email,
-      phone
-    }, (err, regRes) => {
+  User
+    .findOne({ name })
+    .exec((err, user) => {
       if (err) {
         res.json(err);
         return;
       }
 
-      const newUser = new User({
-        name,
-        password,
-        email,
-        authyId: regRes.user.id
-      });
+      if (user) {
+        res.json({ err: "Username Already Registered" });
+        return;
+      }
 
-      newUser.save((err, savedUser) => {
+      authy.registerUser({
+        countryCode,
+        email,
+        phone
+      }, (err, regRes) => {
         if (err) {
           res.json(err);
-        } else {
-          if (isTwoFA) {
-            res.json({
-              ...JSON.parse(JSON.stringify(savedUser)),
-              success: true,
-            });
-          } else {
-            const { token, refreshToken } = generateToken(savedUser);
-
-            res.json({
-              ...JSON.parse(JSON.stringify(savedUser)),
-              _token: token,
-              refreshToken,
-              success: true,
-              message: 'Regisration successful!',
-            });
-          }
+          return;
         }
+
+        const newUser = new User({
+          name,
+          password,
+          email,
+          authyId: regRes.user.id
+        });
+
+        newUser.save((err, savedUser) => {
+          if (err) {
+            res.json(err);
+          } else {
+            if (isTwoFA) {
+              res.json({
+                ...savedUser._doc,
+                success: true,
+              });
+            } else {
+              const { token, refreshToken } = generateToken(savedUser);
+
+              res.json({
+                ...savedUser._doc,
+                _token: token,
+                refreshToken,
+                success: true,
+                message: 'Regisration successful!',
+              });
+            }
+          }
+        });
       });
     });
-  });
 });
 
 router.route('/sms').post((req, res) => {

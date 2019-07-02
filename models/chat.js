@@ -13,7 +13,11 @@ const chatSchema = new Schema(
         users: [{
             type: Schema.Types.ObjectId,
             ref: CONFIG.DB_MODELS.USER
-        }]
+        }],
+        userKeys:  {
+            type: Map,
+            of: String
+        }
     },
     {
         timestamps: true

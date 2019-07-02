@@ -14,6 +14,9 @@ const CONFIG = require('./config');
 const loginRouter = require('./routes/login');
 mongoose.Promise = require('bluebird');
 
+const rsaWrapper = require('./components/rsa-wrapper');
+
+// rsaWrapper.initLoadServerKeys(__dirname);
 
 const Message = require('./models/message');
 const Chat = require('./models/chat');
@@ -27,9 +30,9 @@ app.use('/search', searchRouter);
 app.use('/token', tokenRouter);
 
 
-const socket = io(http);
+const IO = io(http);
 
-socket
+IO
   .use((socket, next) => {
     if (socket.handshake.query && socket.handshake.query.token) {
       jwt.verify(
@@ -53,19 +56,102 @@ socket
       console.log('user disconnected');
     });
 
-    socket.on('typing', data => {
-      socket.broadcast.emit('notifyTyping', {
-        user: data.user,
-        message: data.message
+    // let currentRoom = null;
+
+    // socket.on('JOIN', ({ chatId }) => {
+    //   currentRoom && socket.leave(currentRoom);
+    //   currentRoom = chatId;
+    //   socket.join(currentRoom);
+    //   console.log('ussre joined room', chatId);
+    //   // socket.to(socket.id).emit('ROOM_JOINED', currentRoom);
+
+    //   // socket.to(currentRoom).emit('NEW_CONNECTION', null);
+    //   // socket.to(currentRoom).emit('PUBLIC_KEY', key);
+    // });
+
+    socket.on('GET_DESTINATION_PUBLIC_KEY',
+      ({ chatId, userPublicKey, userId }) => {
+        Chat
+          .findOne({ _id: chatId })
+          .then((chat) => {
+            chat.userKeys.set(userId, userPublicKey);
+            chat
+              .save()
+              .then(() => {
+                generateAndSendKeys(chatId, userId);
+              });
+          });
       });
-    });
 
-    socket.on('stop_typing', () => {
-      socket.broadcast.emit('notifyStopTyping');
-    });
+    function generateAndSendKeys(chatId, userId) {
+      Promise.all([
+        Promise.resolve(
+          rsaWrapper.generate(__dirname, chatId, userId)
+        ),
+        Promise.resolve(
+          rsaWrapper.initLoadServerKeys(__dirname, chatId, userId)
+        ),
+      ]).then(() => {
+        socket.emit('DESTINATION_PUBLIC_KEY',
+          {
+            chatId,
+            key: rsaWrapper[`${chatId}${userId}public`].toString()
+          });
+      });
+    }
 
-    socket.on('PUBLIC_KEY', (key) => {
-      socket.broadcast.emit('PUBLIC_KEY', key);
+    // socket.on('PUBLIC_KEY', ({ _id, key }) => {
+    //   socket.to(currentRoom).emit('PUBLIC_KEY', { _id, key });
+    // });
+
+    // socket.on('typing', data => {
+    //   socket.broadcast.emit('notifyTyping', {
+    //     user: data.user,
+    //     message: data.message
+    //   });
+    // });
+
+    // socket.on('stop_typing', () => {
+    //   socket.broadcast.emit('notifyStopTyping');
+    // });
+
+    socket.on('GET_CURRENT_CHAT', ({ chatId, userId }) => {
+      console.log('infoo', chatId, userId);
+
+      Chat
+        .findOne(
+          { _id: chatId }
+        )
+        .populate({ path: 'messages', populate: { path: 'user' } })
+        .then((res) => {
+          if (res._doc.messages.length > 0) {
+
+            let encryptMessagesPromises = res._doc.messages.map(message => {
+              return Promise.resolve(
+                rsaWrapper.encrypt(
+                  Buffer.from(res._doc.userKeys.get(userId)),
+                  rsaWrapper.decrypt(
+                    Buffer.from(
+                      rsaWrapper[`${message.chatId}${message.user._id}private`]
+                    ),
+                    message.text
+                  )
+                )
+              ).then(e => {
+                return {
+                  ...message._doc,
+                  text: e
+                };
+              });
+            });
+
+            Promise.all(encryptMessagesPromises).then(enc => {
+              socket.emit('SET_CURRENT_CHAT', { ...res._doc, messages: enc });
+            });
+          } else {
+            socket.emit('SET_CURRENT_CHAT', { ...res._doc, messages: [] });
+          }
+        });
     });
 
     socket.on('send_message', message => {
@@ -86,13 +172,29 @@ socket
               { $push: { messages: message._id } }
             ).then(() => {
               Message
-                .find({ _id: message._id })
+                .findOne({ _id: message._id })
                 .populate('user')
                 .then((msg) => {
-                  socket.emit('new_message', msg);
+                  Chat.findOne({ _id: message.chatId }).then(chat => {
+                    Promise.resolve(
+                      rsaWrapper.encrypt(
+                        Buffer.from(chat.userKeys.get(socket.decoded._id)),
+                        rsaWrapper.decrypt(
+                          Buffer.from(
+                            rsaWrapper[`${message.chatId}${socket.decoded._id}private`]
+                          ),
+                          message.text
+                        ))
+                    ).then(res => {
+                      console.log(222, res);
+                      socket.emit(
+                        'new_message',
+                        { ...msg._doc, text: res }
+                      );
+                    });
+                  });
                 });
-            }
-            );
+            });
         });
     });
   });
