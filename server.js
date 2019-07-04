@@ -16,7 +16,7 @@ mongoose.Promise = require('bluebird');
 
 const rsaWrapper = require('./components/rsa-wrapper');
 
-// rsaWrapper.initLoadServerKeys(__dirname);
+mongoose.set('useFindAndModify', false);
 
 const Message = require('./models/message');
 const Chat = require('./models/chat');
@@ -56,53 +56,37 @@ IO
       console.log('user disconnected');
     });
 
-    // let currentRoom = null;
+    let currentRoom = null;
+    let loadKeys = false;
 
-    // socket.on('JOIN', ({ chatId }) => {
-    //   currentRoom && socket.leave(currentRoom);
-    //   currentRoom = chatId;
-    //   socket.join(currentRoom);
-    //   console.log('ussre joined room', chatId);
-    //   // socket.to(socket.id).emit('ROOM_JOINED', currentRoom);
-
-    //   // socket.to(currentRoom).emit('NEW_CONNECTION', null);
-    //   // socket.to(currentRoom).emit('PUBLIC_KEY', key);
-    // });
-
-    socket.on('GET_DESTINATION_PUBLIC_KEY',
-      ({ chatId, userPublicKey, userId }) => {
-        Chat
-          .findOne({ _id: chatId })
-          .then((chat) => {
-            chat.userKeys.set(userId, userPublicKey);
-            chat
-              .save()
-              .then(() => {
-                generateAndSendKeys(chatId, userId);
-              });
-          });
-      });
-
-    function generateAndSendKeys(chatId, userId) {
+    const generateAndSendKeys = (chatId, userId) => {
       Promise.all([
-        Promise.resolve(
-          rsaWrapper.generate(__dirname, chatId, userId)
-        ),
-        Promise.resolve(
-          rsaWrapper.initLoadServerKeys(__dirname, chatId, userId)
-        ),
+        Promise.resolve(rsaWrapper.generate(__dirname, chatId, userId)),
+        Promise.resolve(rsaWrapper.initLoadServerKeys(__dirname, chatId, userId)),
       ]).then(() => {
+        loadKeys = true;
         socket.emit('DESTINATION_PUBLIC_KEY',
           {
             chatId,
             key: rsaWrapper[`${chatId}${userId}public`].toString()
           });
       });
-    }
+    };
 
-    // socket.on('PUBLIC_KEY', ({ _id, key }) => {
-    //   socket.to(currentRoom).emit('PUBLIC_KEY', { _id, key });
-    // });
+    socket.on('GET_DESTINATION_PUBLIC_KEY', ({ chatId, userPublicKey }) => {
+      const { _id: userId } = socket.decoded;
+
+      Chat
+        .findOne({ _id: chatId })
+        .then((chat) => {
+          chat.userKeys.set(userId, userPublicKey);
+          chat
+            .save()
+            .then(() => {
+              generateAndSendKeys(chatId, userId);
+            });
+        });
+    });
 
     // socket.on('typing', data => {
     //   socket.broadcast.emit('notifyTyping', {
@@ -115,8 +99,21 @@ IO
     //   socket.broadcast.emit('notifyStopTyping');
     // });
 
-    socket.on('GET_CURRENT_CHAT', ({ chatId, userId }) => {
-      console.log('infoo', chatId, userId);
+    const joinRoom = (chatId) => {
+      currentRoom && socket.leave(currentRoom);
+      currentRoom = chatId;
+      socket.join(currentRoom);
+      console.log('user joined room', chatId);
+      // socket.to(socket.id).emit('ROOM_JOINED', currentRoom);
+      // socket.to(currentRoom).emit('NEW_CONNECTION', null);
+    };
+
+    socket.on('GET_CURRENT_CHAT', async ({ chatId }) => {
+      const { _id: userId } = socket.decoded;
+
+      if (!loadKeys) {
+        await Promise.resolve(rsaWrapper.initLoadServerKeys(__dirname, chatId, userId));
+      }
 
       Chat
         .findOne(
@@ -151,47 +148,47 @@ IO
           } else {
             socket.emit('SET_CURRENT_CHAT', { ...res._doc, messages: [] });
           }
+          joinRoom(chatId);
         });
     });
 
     socket.on('send_message', message => {
-      // socket.broadcast.emit('received', { message });
+      const { _id } = socket.decoded;
+      const { text, chatId } = message;
 
       const chatMessage = new Message({
-        text: message.text,
-        user: socket.decoded._id,
-        chatId: message.chatId
+        text,
+        user: _id,
+        chatId
       });
 
       chatMessage
         .save()
         .then(message => {
           Chat
-            .updateMany(
-              { _id: message.chatId },
-              { $push: { messages: message._id } }
-            ).then(() => {
+            .findOneAndUpdate(
+              { _id: chatId },
+              { $push: { messages: message._id } },
+              { new: true }
+            ).then((chat) => {
               Message
                 .findOne({ _id: message._id })
                 .populate('user')
                 .then((msg) => {
-                  Chat.findOne({ _id: message.chatId }).then(chat => {
-                    Promise.resolve(
-                      rsaWrapper.encrypt(
-                        Buffer.from(chat.userKeys.get(socket.decoded._id)),
-                        rsaWrapper.decrypt(
-                          Buffer.from(
-                            rsaWrapper[`${message.chatId}${socket.decoded._id}private`]
-                          ),
-                          message.text
-                        ))
-                    ).then(res => {
-                      console.log(222, res);
-                      socket.emit(
-                        'new_message',
-                        { ...msg._doc, text: res }
-                      );
-                    });
+                  Promise.resolve(
+                    rsaWrapper.encrypt(
+                      Buffer.from(chat._doc.userKeys.get(_id)),
+                      rsaWrapper.decrypt(
+                        Buffer.from(
+                          rsaWrapper[`${chatId}${_id}private`]
+                        ),
+                        text
+                      ))
+                  ).then(res => {
+                    socket.emit(
+                      'new_message',
+                      { ...msg._doc, text: res }
+                    );
                   });
                 });
             });
