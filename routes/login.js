@@ -38,6 +38,13 @@ router.route('/login').post((req, res, next) => {
                 message: 'Login successful!',
               });
             }
+
+            User.findOneAndUpdate(
+              { name },
+              { $set: { isOnline: true } },
+              { new: true }
+            ).then((e) => console.log(e));
+
           } else {
             return next(new Error('err'));
           }
@@ -75,7 +82,8 @@ router.route('/registration').post((req, res) => {
           name,
           password,
           email,
-          authyId: regRes.user.id
+          authyId: regRes.user.id,
+          isOnline: true
         });
 
         newUser.save((err, savedUser) => {
@@ -154,13 +162,19 @@ router.route('/verify').post((req, res) => {
               _token: token,
               refreshToken,
             });
-            // res.json(tokenRes);
           });
     });
 });
 
-router.route('/logout').post(() => {
-  //TODO: implement logic
+router.route('/logout').post((req) => {
+  const { name } = req.body;
+  User
+    .findOneAndUpdate(
+      { name },
+      { $set: { isOnline: false } },
+      { new: true }
+    )
+    .then((e) => console.log(e));
 });
 
 module.exports = router;

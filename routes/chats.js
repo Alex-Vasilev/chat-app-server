@@ -37,4 +37,16 @@ router.post('/new', (req, res) => {
         });
 });
 
+router.post('/add_user', (req, res) => {
+    const { recieverId, chatId } = req.body;
+
+    User
+        .findOneAndUpdate(
+            { _id: recieverId },
+            { $push: { chats: chatId } },
+            { new: true }
+        )
+        .then(() => res.json({ sucsess: true }));
+});
+
 module.exports = router;

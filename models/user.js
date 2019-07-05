@@ -22,7 +22,7 @@ const userSchema = new Schema(
             ref: CONFIG.DB_MODELS.CHAT
         }],
         authyId: Number,
-        
+        isOnline: Boolean,
     },
     {
         toJSON: {
