@@ -39,12 +39,6 @@ router.route('/login').post((req, res, next) => {
               });
             }
 
-            User.findOneAndUpdate(
-              { name },
-              { $set: { isOnline: true } },
-              { new: true }
-            ).then((e) => console.log(e));
-
           } else {
             return next(new Error('err'));
           }
@@ -166,15 +160,8 @@ router.route('/verify').post((req, res) => {
     });
 });
 
-router.route('/logout').post((req) => {
-  const { name } = req.body;
-  User
-    .findOneAndUpdate(
-      { name },
-      { $set: { isOnline: false } },
-      { new: true }
-    )
-    .then((e) => console.log(e));
+router.route('/logout').post(() => {
+
 });
 
 module.exports = router;

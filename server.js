@@ -20,6 +20,7 @@ mongoose.set('useFindAndModify', false);
 
 const Message = require('./models/message');
 const Chat = require('./models/chat');
+const User = require('./models/user');
 
 app.use(bodyParser.json());
 
@@ -52,8 +53,21 @@ IO
   .on('connection', socket => {
     console.log('user connected');
 
+    User.findOneAndUpdate(
+      { _id: socket.decoded._id },
+      { $set: { isOnline: true } },
+      { new: true }
+    ).then((e) => console.log(e));
+
     socket.on('disconnect', () => {
       console.log('user disconnected');
+      User
+        .findOneAndUpdate(
+          { _id: socket.decoded._id },
+          { $set: { isOnline: false } },
+          { new: true }
+        )
+        .then((e) => console.log(e));
     });
 
     let currentRoom = null;
@@ -110,9 +124,8 @@ IO
 
     socket.on('GET_CURRENT_CHAT', async ({ chatId }) => {
       const { _id: userId } = socket.decoded;
-
       if (!loadKeys) {
-        await Promise.resolve(rsaWrapper.initLoadServerKeys(__dirname, chatId, userId));
+        await rsaWrapper.initLoadServerKeys(__dirname, chatId, userId);
       }
 
       Chat
@@ -130,6 +143,7 @@ IO
                   rsaWrapper.decrypt(
                     Buffer.from(
                       rsaWrapper[`${message.chatId}${message.user._id}private`]
+                      || rsaWrapper[`${message.chatId}${userId}private`]
                     ),
                     message.text
                   )
@@ -175,21 +189,38 @@ IO
                 .findOne({ _id: message._id })
                 .populate('user')
                 .then((msg) => {
-                  Promise.resolve(
-                    rsaWrapper.encrypt(
-                      Buffer.from(chat._doc.userKeys.get(_id)),
-                      rsaWrapper.decrypt(
-                        Buffer.from(
-                          rsaWrapper[`${chatId}${_id}private`]
-                        ),
-                        text
-                      ))
-                  ).then(res => {
-                    socket.emit(
-                      'new_message',
-                      { ...msg._doc, text: res }
-                    );
-                  });
+                  let promises = [];
+
+                  for (let enry of chat._doc.userKeys) {
+                    promises.push(
+                      Promise.resolve(
+                        rsaWrapper.encrypt(
+                          Buffer.from(chat._doc.userKeys.get(enry[0])),
+                          rsaWrapper.decrypt(
+                            Buffer.from(
+                              rsaWrapper[`${chatId}${msg.user._id}private`]
+                            ),
+                            text
+                          )
+                        )
+                      ).then(res => {
+                        return { ...msg._doc, text: res, reciever: enry[0] };
+                      }));
+                  }
+
+                  Promise.all(promises)
+                    .then(enc => {
+                      socket.emit(
+                        'new_message',
+                        enc
+                      );
+
+                      socket.to(currentRoom).emit(
+                        'new_message',
+                        enc
+                      );
+                    });
+
                 });
             });
         });

@@ -33,7 +33,7 @@ rsaWrapper.generate = (basePath, chatId, userId) => {
             'keys',
             `${chatId}${userId}server.private.pem`
         ),
-        key.exportKey('pkcs8-private-pem')
+        key.exportKey('pkcs1-private-pem')
     );
     fs.writeFileSync(
         path.resolve(
@@ -41,7 +41,7 @@ rsaWrapper.generate = (basePath, chatId, userId) => {
             'keys',
             `${chatId}${userId}server.public.pem`
         ),
-        key.exportKey('pkcs8-public-pem')
+        key.exportKey('pkcs1-public-pem')
     );
 
     return true;
